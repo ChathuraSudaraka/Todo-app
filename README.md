@@ -13,7 +13,7 @@ This is the backend for the Todo Application built with Java Servlets and Hibern
 ## Project Structure
 
 ```
-viva-test/
+Backend/
 ├── src/java/com/todoapp/
 │   ├── config/          # Hibernate configuration
 │   ├── dao/            # Data Access Objects
@@ -61,14 +61,14 @@ ant dist
 javac -cp "lib/*" -d build/classes src/java/com/todoapp/**/*.java
 
 # Create WAR file
-jar -cvf viva-test.war -C web .
+jar -cvf Backend.war -C web .
 ```
 
 ### 3. Deploy to Tomcat
 
 1. Copy the generated WAR file to Tomcat's webapps directory
 2. Start Tomcat server
-3. Access the application at: `http://localhost:8080/viva-test/`
+3. Access the application at: `http://localhost:8080/Backend/`
 
 ## API Endpoints
 
@@ -87,7 +87,7 @@ jar -cvf viva-test.war -C web .
 ## Testing the API
 
 1. Start the Tomcat server
-2. Open `http://localhost:8080/viva-test/` in your browser
+2. Open `http://localhost:8080/Backend/` in your browser
 3. Use the test interface to interact with the API
 
 ## CORS Configuration
