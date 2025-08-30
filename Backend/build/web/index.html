@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Todo Application Backend API Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        button { margin: 5px; padding: 10px; }
+        input { margin: 5px; padding: 5px; }
+        #results { margin-top: 20px; padding: 10px; background: #f5f5f5; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>Todo Application Backend API Test</h1>
+
+    <div class="section">
+        <h2>Test API Endpoints</h2>
+
+        <h3>Create User</h3>
+        <button onclick="createUser()">Create Test User</button>
+
+        <h3>Get All Users</h3>
+        <button onclick="getAllUsers()">Get All Users</button>
+
+        <h3>Create Todo</h3>
+        <input type="text" id="todoTitle" placeholder="Todo title" value="Test Todo">
+        <input type="text" id="todoDescription" placeholder="Todo description" value="Test description">
+        <input type="number" id="userId" placeholder="User ID" value="1">
+        <button onclick="createTodo()">Create Todo</button>
+
+        <h3>Get Todos by User</h3>
+        <input type="number" id="userIdForTodos" placeholder="User ID" value="1">
+        <button onclick="getTodosByUser()">Get Todos by User</button>
+
+        <h3>Get All Todos</h3>
+        <button onclick="getAllTodos()">Get All Todos</button>
+    </div>
+
+    <div class="section">
+        <h2>API Results</h2>
+        <div id="results">Results will appear here...</div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/Backend/api';
+
+        function createUser() {
+            fetch(`${API_BASE}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            })
+            .then(response => response.json())
+            .then(data => displayResult('Create User', data))
+            .catch(error => displayResult('Create User Error', error));
+        }
+
+        function getAllUsers() {
+            fetch(`${API_BASE}/users`)
+            .then(response => response.json())
+            .then(data => displayResult('All Users', data))
+            .catch(error => displayResult('Get Users Error', error));
+        }
+
+        function createTodo() {
+            const title = document.getElementById('todoTitle').value;
+            const description = document.getElementById('todoDescription').value;
+            const userId = document.getElementById('userId').value;
+
+            const params = new URLSearchParams();
+            params.append('title', title);
+            params.append('description', description);
+            params.append('userId', userId);
+
+            fetch(`${API_BASE}/todos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params
+            })
+            .then(response => response.json())
+            .then(data => displayResult('Create Todo', data))
+            .catch(error => displayResult('Create Todo Error', error));
+        }
+
+        function getTodosByUser() {
+            const userId = document.getElementById('userIdForTodos').value;
+            fetch(`${API_BASE}/todos?userId=${userId}`)
+            .then(response => response.json())
+            .then(data => displayResult('Todos by User', data))
+            .catch(error => displayResult('Get Todos Error', error));
+        }
+
+        function getAllTodos() {
+            fetch(`${API_BASE}/todos`)
+            .then(response => response.json())
+            .then(data => displayResult('All Todos', data))
+            .catch(error => displayResult('Get Todos Error', error));
+        }
+
+        function displayResult(operation, data) {
+            const resultsDiv = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            resultsDiv.innerHTML = `[${timestamp}] ${operation}:\n${JSON.stringify(data, null, 2)}\n\n${resultsDiv.innerHTML}`;
+        }
+    </script>
+</body>
+</html>
