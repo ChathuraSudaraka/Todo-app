@@ -77,8 +77,8 @@ function SignupScreen({ navigation }) {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <LinearGradient
-          colors={['#f8f9fa', '#e3f2fd', '#fce4ec']}
-          locations={[0, 0.6, 1]}
+          colors={isDark ? ['#0d1117', '#161b22', '#21262d'] : ['#ff6b6b', '#4ecdc4', '#45b7d1']}
+          locations={[0, 0.4, 1]}
           style={styles.background}
         >
           {/* Background bubbles */}
@@ -179,28 +179,28 @@ const styles = StyleSheet.create({
   bubble1: {
     width: 200,
     height: 200,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#ff9a9e',
     top: -100,
     right: -50,
   },
   bubble2: {
     width: 150,
     height: 150,
-    backgroundColor: '#06b6d4',
+    backgroundColor: '#a8edea',
     top: 100,
     left: -75,
   },
   bubble3: {
     width: 100,
     height: 100,
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#d299c2',
     bottom: 200,
     right: 30,
   },
   bubble4: {
     width: 120,
     height: 120,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#fad0c4',
     bottom: -60,
     left: 50,
   },
@@ -218,14 +218,20 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: '#ffffff',
     marginBottom: 8,
     lineHeight: 40,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: 'rgba(255, 255, 255, 0.9)',
     lineHeight: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   form: {
     width: '100%',

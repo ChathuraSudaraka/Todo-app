@@ -137,10 +137,20 @@ public class TodoServlet extends HttpServlet {
         String path = req.getPathInfo(); // expected /{id}
         if (path == null || path.length() <= 1) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            try (PrintWriter out = resp.getWriter()) { out.print("{\"error\":\"missing id in path\"}"); }
             return;
         }
-        Long id = Long.parseLong(path.substring(1));
+        Long id = null;
+        try {
+            id = Long.parseLong(path.substring(1));
+        } catch (NumberFormatException nfe) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            try (PrintWriter out = resp.getWriter()) { out.print("{\"error\":\"invalid id\"}"); }
+            return;
+        }
+
         String body = readRequestBody(req);
+        System.out.println("TodoServlet.doPut - id=" + id + " body=" + body);
         Integer completedValue = null;
         if (body != null && body.length() > 0) {
             String cstr = extractJsonString(body, "is_completed");
@@ -158,18 +168,53 @@ public class TodoServlet extends HttpServlet {
                 }
             }
         }
+
         Session session = HibernateUtil.getSessionFactory().openSession();
         try {
             Transaction tx = session.beginTransaction();
             Todo t = (Todo) session.get(Todo.class, id);
-            if (t != null && completedValue != null) {
+            if (t == null) {
+                tx.commit();
+                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                try (PrintWriter out = resp.getWriter()) { out.print("{\"error\":\"todo not found\"}"); }
+                return;
+            }
+
+            String responseJson = "{\"ok\":false}";
+            if (completedValue != null) {
+                System.out.println("Setting completed for todo id=" + id + " to " + (completedValue != 0));
                 t.setCompleted(completedValue != 0);
                 session.update(t);
+                // force flush so DB is updated before we respond
+                session.flush();
+                // build updated todo JSON
+                responseJson = "{" +
+                        "\"id\":" + t.getId() + "," +
+                        "\"text\":\"" + escape(t.getTitle()) + "\"," +
+                        "\"title\":\"" + escape(t.getTitle()) + "\"," +
+                        "\"description\":\"" + escape(t.getDescription() != null ? t.getDescription() : "") + "\"," +
+                        "\"priority\":\"" + escape(t.getPriority() != null ? t.getPriority() : "MEDIUM") + "\"," +
+                        "\"is_completed\":" + (t.isCompleted() ? 1 : 0) + "," +
+                        "\"user_id\":" + (t.getUser() != null ? t.getUser().getId() : "null") +
+                        "}";
+            } else {
+                System.out.println("No completed value provided for todo id=" + id);
+                // still return current todo state
+                responseJson = "{" +
+                        "\"id\":" + t.getId() + "," +
+                        "\"text\":\"" + escape(t.getTitle()) + "\"," +
+                        "\"title\":\"" + escape(t.getTitle()) + "\"," +
+                        "\"description\":\"" + escape(t.getDescription() != null ? t.getDescription() : "") + "\"," +
+                        "\"priority\":\"" + escape(t.getPriority() != null ? t.getPriority() : "MEDIUM") + "\"," +
+                        "\"is_completed\":" + (t.isCompleted() ? 1 : 0) + "," +
+                        "\"user_id\":" + (t.getUser() != null ? t.getUser().getId() : "null") +
+                        "}";
             }
+
             tx.commit();
             resp.setStatus(HttpServletResponse.SC_OK);
             try (PrintWriter out = resp.getWriter()) {
-                out.print("{\"ok\":true}");
+                out.print(responseJson);
             }
         } finally {
             session.close();
