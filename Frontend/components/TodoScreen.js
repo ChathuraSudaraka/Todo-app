@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 120, // Add padding for the fixed tab bar and add button
+    paddingBottom: 120,
   },
   headerTitle: {
     fontSize: 28,
@@ -726,7 +726,7 @@ const styles = StyleSheet.create({
   },
   addButton: {
     position: 'absolute',
-    bottom: 110, // Position above the tab bar
+    bottom: 135, // Position above the tab bar
     right: 20,
     width: 56,
     height: 56,
@@ -892,12 +892,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 80,
+    height: 120,
     flexDirection: 'row',
     backgroundColor: '#ffffff',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingBottom: 20,
+    paddingBottom: 50,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
