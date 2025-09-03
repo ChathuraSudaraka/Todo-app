@@ -45,23 +45,23 @@ public class UserServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         String path = req.getPathInfo(); // e.g. /auth
         resp.setContentType("application/json;charset=UTF-8");
-        // authentication endpoint: POST /api/users/auth with JSON { username, password }
+        // authentication endpoint: POST /api/users/auth with JSON { email, password }
         if (path != null && path.equals("/auth")) {
             String body = readRequestBody(req);
-            String username = req.getParameter("username");
+            String email = req.getParameter("email");
             String password = req.getParameter("password");
-            if ((username == null || password == null) && body != null && body.length() > 0) {
-                username = extractJsonString(body, "username");
+            if ((email == null || password == null) && body != null && body.length() > 0) {
+                email = extractJsonString(body, "email");
                 password = extractJsonString(body, "password");
             }
-            if (username == null || password == null) {
+            if (email == null || password == null) {
                 resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 return;
             }
             Session session = HibernateUtil.getSessionFactory().openSession();
             try {
-                List<User> users = (List<User>) session.createQuery("from User where username = :u")
-                        .setParameter("u", username).list();
+                List<User> users = (List<User>) session.createQuery("from User where email = :e")
+                        .setParameter("e", email).list();
                 if (users.isEmpty()) {
                     resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     try (PrintWriter out = resp.getWriter()) { out.print("{\"ok\":false}"); }

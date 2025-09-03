@@ -1,29 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../utils/api';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
 import ThemeToggle from './ThemeToggle';
 
 function LoginScreen({ navigation }) {
   const { colors, isDark } = useTheme();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
-
-  React.useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
-  }, []);
 
   const handleLogin = async () => {
-    if (!username || !password) {
+    if (!email || !password) {
       Alert.alert('Error', 'Please fill all fields');
       return;
     }
@@ -35,11 +25,11 @@ function LoginScreen({ navigation }) {
         const res = await fetch(`${API_BASE}/api/users/auth`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
+          body: JSON.stringify({ email, password })
         });
         if (res.ok) {
           const data = await res.json().catch(() => null);
-          await AsyncStorage.setItem('currentUser', username);
+          await AsyncStorage.setItem('currentUser', email);
           await AsyncStorage.setItem('currentUserId', data?.id?.toString() || '');
           navigation.replace('Todo');
           return;
@@ -58,8 +48,8 @@ function LoginScreen({ navigation }) {
       const storedUsers = await AsyncStorage.getItem('users');
       const users = storedUsers ? JSON.parse(storedUsers) : {};
 
-      if (users[username] && users[username] === password) {
-        await AsyncStorage.setItem('currentUser', username);
+      if (users[email] && users[email] === password) {
+        await AsyncStorage.setItem('currentUser', email);
         navigation.replace('Todo');
       } else {
         Alert.alert('Error', 'Invalid credentials');
@@ -72,76 +62,78 @@ function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <LinearGradient
-        colors={isDark ? ['#1a1a2e', '#16213e'] : ['#667eea', '#764ba2']}
-        style={styles.gradient}
+        colors={['#f8f9fa', '#e3f2fd', '#fce4ec']}
+        locations={[0, 0.6, 1]}
+        style={styles.background}
       >
+        {/* Background bubbles */}
+        <View style={[styles.bubble, styles.bubble1]} />
+        <View style={[styles.bubble, styles.bubble2]} />
+        <View style={[styles.bubble, styles.bubble3]} />
+        <View style={[styles.bubble, styles.bubble4]} />
+        
         <View style={styles.themeToggleContainer}>
           <ThemeToggle />
         </View>
-        <Animated.View style={[styles.card, { opacity: fadeAnim, backgroundColor: colors.surface }]}>
+        
+        <View style={styles.content}>
           <View style={styles.header}>
-            <Ionicons name="checkmark-circle" size={60} color={colors.primary} />
-            <Text style={[styles.title, { color: colors.text }]}>Welcome Back</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Sign in to continue</Text>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Sign in to your account</Text>
           </View>
 
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
-              <Ionicons name="person" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+          <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email Address</Text>
               <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Username"
-                placeholderTextColor={colors.inputPlaceholder}
-                value={username}
-                onChangeText={setUsername}
+                style={styles.input}
+                placeholder="admin@example.com"
+                placeholderTextColor="#9ca3af"
+                value={email}
+                onChangeText={setEmail}
                 autoCapitalize="none"
+                keyboardType="email-address"
               />
             </View>
 
-            <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]}>
-              <Ionicons name="lock-closed" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
               <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="Password"
-                placeholderTextColor={colors.inputPlaceholder}
+                style={styles.input}
+                placeholder="••••••••••"
+                placeholderTextColor="#9ca3af"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
                 autoCapitalize="none"
               />
             </View>
-          </View>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            <LinearGradient
-              colors={loading ? [colors.buttonDisabled, colors.buttonDisabled] : [colors.primary, colors.secondary]}
-              style={styles.buttonGradient}
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color={colors.textInverse} />
+                <ActivityIndicator color="white" />
               ) : (
-                <>
-                  <Text style={[styles.buttonText, { color: colors.textInverse }]}>Login</Text>
-                  <Ionicons name="arrow-forward" size={20} color={colors.textInverse} />
-                </>
+                <Text style={styles.buttonText}>Sign In</Text>
               )}
-            </LinearGradient>
-          </TouchableOpacity>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.linkContainer}
-            onPress={() => navigation.navigate('Signup')}
-          >
-            <Text style={[styles.linkText, { color: colors.textSecondary }]}>Don't have an account? </Text>
-            <Text style={[styles.linkTextBold, { color: colors.primary }]}>Sign up</Text>
-          </TouchableOpacity>
-        </Animated.View>
+            <TouchableOpacity
+              style={styles.linkContainer}
+              onPress={() => navigation.navigate('Signup')}
+            >
+              <Text style={styles.linkText}>Don't have an account? </Text>
+              <Text style={styles.linkTextBold}>Sign up</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <Text style={styles.demoText}>Demo credentials: admin@example.com / Pass123!@#</Text>
+        </View>
       </LinearGradient>
     </KeyboardAvoidingView>
   );
@@ -151,11 +143,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradient: {
+  background: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
+  },
+  bubble: {
+    position: 'absolute',
+    borderRadius: 1000,
+    opacity: 0.1,
+  },
+  bubble1: {
+    width: 200,
+    height: 200,
+    backgroundColor: '#8b5cf6',
+    top: -100,
+    right: -50,
+  },
+  bubble2: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#06b6d4',
+    top: 100,
+    left: -75,
+  },
+  bubble3: {
+    width: 100,
+    height: 100,
+    backgroundColor: '#f59e0b',
+    bottom: 200,
+    right: 30,
+  },
+  bubble4: {
+    width: 120,
+    height: 120,
+    backgroundColor: '#ef4444',
+    bottom: -60,
+    left: 50,
   },
   themeToggleContainer: {
     position: 'absolute',
@@ -163,74 +185,72 @@ const styles = StyleSheet.create({
     right: 20,
     zIndex: 10,
   },
-  card: {
-    borderRadius: 20,
-    padding: 30,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 10,
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 60,
   },
   header: {
-    alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 48,
   },
   title: {
-    fontSize: 28,
+    fontSize: 36,
     fontWeight: 'bold',
-    marginTop: 10,
-    marginBottom: 5,
+    color: '#1f2937',
+    marginBottom: 8,
+    lineHeight: 40,
   },
   subtitle: {
     fontSize: 16,
+    color: '#6b7280',
+    lineHeight: 24,
+  },
+  form: {
+    width: '100%',
   },
   inputContainer: {
-    marginBottom: 30,
+    marginBottom: 24,
   },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderWidth: 1,
-  },
-  inputIcon: {
-    marginRight: 10,
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 8,
   },
   input: {
-    flex: 1,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     fontSize: 16,
+    color: '#1f2937',
   },
   button: {
+    backgroundColor: '#6366f1',
     borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 20,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 32,
+    shadowColor: '#6366f1',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
-  buttonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-  },
-  buttonGradientDisabled: {
-    // LinearGradient handles disabled state
-  },
   buttonText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginRight: 10,
+    fontWeight: '600',
+    color: 'white',
   },
   linkContainer: {
     flexDirection: 'row',
@@ -239,10 +259,19 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 16,
+    color: '#6b7280',
   },
   linkTextBold: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#6366f1',
+  },
+  demoText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: 40,
+    fontStyle: 'italic',
   },
 });
 
