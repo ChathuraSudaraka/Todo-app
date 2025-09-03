@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import LoginScreen from './components/LoginScreen';
 import SignupScreen from './components/SignupScreen';
 import TodoScreen from './components/TodoScreen';
+import ProfileScreen from './components/ProfileScreen';
 
 const Stack = createStackNavigator();
 
@@ -23,6 +24,7 @@ export default function App() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="Todo" component={TodoScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
         </Stack.Navigator>
         <StatusBar style="auto" />
       </NavigationContainer>

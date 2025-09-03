@@ -22,9 +22,14 @@ public class TodoServlet extends HttpServlet {
         Session session = HibernateUtil.getSessionFactory().openSession();
         try {
             String userParam = req.getParameter("user");
+            String userIdParam = req.getParameter("user_id");
             List<Todo> todos;
-            if (userParam != null && !userParam.isEmpty()) {
-                // filter by user
+            if (userIdParam != null && !userIdParam.isEmpty()) {
+                // filter by numeric user id
+                todos = (List<Todo>) session.createQuery("from Todo t where t.user.id = :uid")
+                        .setParameter("uid", Long.parseLong(userIdParam)).list();
+            } else if (userParam != null && !userParam.isEmpty()) {
+                // filter by username
                 todos = (List<Todo>) session.createQuery("from Todo t where t.user.username = :u")
                         .setParameter("u", userParam).list();
             } else {
@@ -37,7 +42,10 @@ public class TodoServlet extends HttpServlet {
                 sb.append('{')
                         .append("\"id\":").append(t.getId()).append(',')
                         .append("\"text\":\"").append(escape(t.getTitle())).append("\",")
-                        .append("\"completed\":").append(t.isCompleted() ? 1 : 0).append(',')
+                        .append("\"title\":\"").append(escape(t.getTitle())).append("\",")
+                        .append("\"description\":\"").append(escape(t.getDescription() != null ? t.getDescription() : "")).append("\",")
+                        .append("\"priority\":\"").append(escape(t.getPriority() != null ? t.getPriority() : "MEDIUM")).append("\",")
+                        .append("\"is_completed\":").append(t.isCompleted() ? 1 : 0).append(',')
                         .append("\"user_id\":").append(t.getUser() != null ? t.getUser().getId() : "null")
                         .append('}');
                 if (i < todos.size() - 1) sb.append(',');
@@ -57,24 +65,27 @@ public class TodoServlet extends HttpServlet {
         String body = readRequestBody(req);
         String title = req.getParameter("title");
         String description = req.getParameter("description");
+        String priority = req.getParameter("priority");
         String categoryId = req.getParameter("categoryId");
         String userId = req.getParameter("user_id");
+        
         if ((title == null || title.isEmpty()) && body != null && body.length() > 0) {
-            // try to extract "text" or "title" from JSON body
-            String text = extractJsonString(body, "text");
-            if (text == null) text = extractJsonString(body, "title");
-            title = text;
-            String comp = extractJsonString(body, "completed");
-            if (comp == null) comp = extractJsonString(body, "completed");
-            // we ignore completed on create for now
+            // Extract from JSON body
+            title = extractJsonString(body, "title");
+            // If title is still null, try "text" for backward compatibility
+            if (title == null) title = extractJsonString(body, "text");
+            
+            description = extractJsonString(body, "description");
+            priority = extractJsonString(body, "priority");
             String uid = extractJsonString(body, "user_id");
             if (uid != null) userId = uid;
         }
+        
         resp.setContentType("application/json;charset=UTF-8");
         Session session = HibernateUtil.getSessionFactory().openSession();
         try {
             Transaction tx = session.beginTransaction();
-            Todo t = new Todo(title, description);
+            Todo t = new Todo(title, description, priority);
             if (categoryId != null) {
                 Category c = (Category) session.get(Category.class, Long.parseLong(categoryId));
                 t.setCategory(c);
@@ -87,7 +98,7 @@ public class TodoServlet extends HttpServlet {
             tx.commit();
             try (PrintWriter out = resp.getWriter()) {
                 // return created todo in frontend-friendly shape
-                out.print("{\"id\":" + t.getId() + ",\"text\":\"" + escape(t.getTitle()) + "\",\"completed\":" + (t.isCompleted() ? 1 : 0) + ",\"user_id\":" + (t.getUser() != null ? t.getUser().getId() : "null") + "}");
+                out.print("{\"id\":" + t.getId() + ",\"text\":\"" + escape(t.getTitle()) + "\",\"title\":\"" + escape(t.getTitle()) + "\",\"description\":\"" + escape(t.getDescription() != null ? t.getDescription() : "") + "\",\"priority\":\"" + escape(t.getPriority() != null ? t.getPriority() : "MEDIUM") + "\",\"is_completed\":" + (t.isCompleted() ? 1 : 0) + ",\"user_id\":" + (t.getUser() != null ? t.getUser().getId() : "null") + "}");
             }
         } finally {
             session.close();
@@ -132,7 +143,11 @@ public class TodoServlet extends HttpServlet {
         String body = readRequestBody(req);
         Integer completedValue = null;
         if (body != null && body.length() > 0) {
-            String cstr = extractJsonString(body, "completed");
+            String cstr = extractJsonString(body, "is_completed");
+            // Also check for "completed" for backward compatibility
+            if (cstr == null) {
+                cstr = extractJsonString(body, "completed");
+            }
             if (cstr != null) {
                 try {
                     completedValue = Integer.parseInt(cstr);

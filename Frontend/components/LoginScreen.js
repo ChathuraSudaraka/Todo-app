@@ -4,7 +4,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../utils/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
-import ThemeToggle from './ThemeToggle';
 
 function LoginScreen({ navigation }) {
   const { colors, isDark } = useTheme();
@@ -73,10 +72,6 @@ function LoginScreen({ navigation }) {
         <View style={[styles.bubble, styles.bubble2]} />
         <View style={[styles.bubble, styles.bubble3]} />
         <View style={[styles.bubble, styles.bubble4]} />
-        
-        <View style={styles.themeToggleContainer}>
-          <ThemeToggle />
-        </View>
         
         <View style={styles.content}>
           <View style={styles.header}>
@@ -178,12 +173,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444',
     bottom: -60,
     left: 50,
-  },
-  themeToggleContainer: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
   },
   content: {
     flex: 1,

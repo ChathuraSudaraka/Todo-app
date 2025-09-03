@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, Modal, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../utils/api';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import ThemeToggle from './ThemeToggle';
-
-const { width } = Dimensions.get('window');
+import { LinearGradient } from 'expo-linear-gradient';
 
 function TodoScreen({ navigation }) {
   const { colors, isDark } = useTheme();
@@ -15,72 +12,133 @@ function TodoScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentUser, setCurrentUser] = useState('');
   const [currentUserId, setCurrentUserId] = useState('');
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(width));
+  const [userEmail, setUserEmail] = useState('');
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskPriority, setTaskPriority] = useState('medium');
 
   useEffect(() => {
     initializeApp();
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
   }, []);
 
   const initializeApp = async () => {
     const user = await AsyncStorage.getItem('currentUser');
     const userId = await AsyncStorage.getItem('currentUserId');
+    const email = await AsyncStorage.getItem('userEmail');
+    console.log('Storage values:', { user, userId, email });
     if (user && userId) {
       setCurrentUser(user);
       setCurrentUserId(userId);
-      await loadTodos(user);
+      setUserEmail(email || '');
+      console.log('Initialized with user:', user, 'userId:', userId, 'email:', email);
+  // prefer loading by numeric user id so todos match DB user_id
+  await loadTodos(userId);
     } else {
+      console.log('No user data found in storage, redirecting to login');
       navigation.replace('Login');
     }
   };
 
-  const loadTodos = async (userId) => {
+  const loadTodos = async (userParam) => {
     try {
-      const res = await fetch(`${API_BASE}/api/todos?user=${encodeURIComponent(userId)}`);
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      console.log('Loading todos for userParam:', userParam);
+      // If userParam looks like a numeric id, query by user_id; otherwise use username
+      let url;
+      if (userParam && /^\d+$/.test(String(userParam))) {
+        url = `${API_BASE}/api/todos?user_id=${encodeURIComponent(userParam)}`;
+      } else {
+        url = `${API_BASE}/api/todos?user=${encodeURIComponent(userParam)}`;
+      }
+      console.log('Fetching from URL:', url);
+      const res = await fetch(url);
+      console.log('Response status:', res.status);
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => 'Unknown error');
+        console.error('Server error response:', errorText);
+        throw new Error(`Server returned ${res.status}: ${errorText}`);
+      }
       const data = await res.json();
-      setTodos(Array.isArray(data) ? data : []);
+      console.log('Raw data from backend:', data);
+      console.log('Data is array:', Array.isArray(data));
+      console.log('Data length:', data?.length || 0);
+      
+      // Normalize is_completed to completed for frontend compatibility
+      const normalizedData = Array.isArray(data) ? data.map(todo => ({
+        ...todo,
+        completed: todo.is_completed || todo.completed || 0,
+        priority: todo.priority ? todo.priority.toLowerCase() : 'medium', // normalize priority to lowercase for display
+        text: todo.title || todo.text || '', // ensure text field exists for compatibility
+        title: todo.title || todo.text || '' // ensure title field exists
+      })) : [];
+      
+      console.log('Normalized data:', normalizedData);
+  console.log('Setting todos with length:', normalizedData.length);
+  setTodos(normalizedData);
     } catch (err) {
       console.error('Error loading todos from backend:', err);
-      Alert.alert('Error', 'Could not load todos from server');
+      Alert.alert('Error', `Could not load todos from server: ${err.message}`);
     }
   };
 
   const addTodo = () => {
-    if (newTodo.trim() === '') {
-      Alert.alert('Error', 'Please enter a todo');
+    if (taskTitle.trim() === '') {
+      Alert.alert('Error', 'Please enter a task title');
       return;
     }
+    
     const tempId = `temp-${Date.now()}`;
-    const tempTodo = { id: tempId, text: newTodo, completed: 0, user_id: currentUserId };
+    const tempTodo = { 
+      id: tempId, 
+      text: taskTitle.trim(), // Display the title for now
+      title: taskTitle.trim(),
+      description: taskDescription.trim(),
+      completed: 0, 
+      user_id: currentUserId,
+      priority: taskPriority
+    };
     setTodos(prev => [tempTodo, ...prev]);
-    setNewTodo('');
+    
+    // Reset form and close modal
+    setTaskTitle('');
+    setTaskDescription('');
+    setTaskPriority('medium');
+    setIsModalVisible(false);
 
     (async () => {
       try {
+        console.log('Creating todo with data:', { 
+          title: taskTitle.trim(), 
+          description: taskDescription.trim() || null,
+          priority: taskPriority,
+          user_id: currentUserId 
+        });
         const res = await fetch(`${API_BASE}/api/todos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: newTodo, user_id: currentUserId })
+          body: JSON.stringify({ 
+            title: taskTitle.trim(), 
+            description: taskDescription.trim() || null,
+            priority: taskPriority,
+            user_id: currentUserId 
+          })
         });
+        console.log('Create todo response status:', res.status);
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const created = await res.json().catch(() => null);
+        console.log('Created todo response:', created);
         if (created && created.id) {
-          setTodos(prev => prev.map(t => (t.id === tempId ? created : t)));
+          // Normalize is_completed to completed for frontend compatibility
+          const normalizedCreated = {
+            ...created,
+            completed: created.is_completed || created.completed || 0,
+            priority: created.priority ? created.priority.toLowerCase() : 'medium', // normalize priority to lowercase for display
+            text: created.title || created.text || '', // ensure text field exists for compatibility
+            title: created.title || created.text || '' // ensure title field exists
+          };
+          setTodos(prev => prev.map(t => (t.id === tempId ? normalizedCreated : t)));
         } else {
-          await loadTodos(currentUser);
+          await loadTodos(currentUserId);
         }
       } catch (err) {
         console.error('Error adding todo to backend:', err);
@@ -113,7 +171,7 @@ function TodoScreen({ navigation }) {
         const res = await fetch(`${API_BASE}/api/todos/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ completed: completed ? 0 : 1 })
+          body: JSON.stringify({ is_completed: completed ? 0 : 1 })
         });
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
       } catch (err) {
@@ -144,130 +202,304 @@ function TodoScreen({ navigation }) {
   };
 
   const filteredTodos = todos.filter(todo =>
-    todo.text.toLowerCase().includes(searchQuery.toLowerCase())
+    (todo.title || todo.text || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const renderItem = ({ item, index }) => (
-    <Animated.View
-      style={[
-        styles.todoCard,
-        {
-          backgroundColor: colors.cardBackground,
-          borderColor: colors.cardBorder,
-          shadowColor: colors.shadowColor,
-          shadowOpacity: colors.shadowOpacity,
-          transform: [{ translateX: slideAnim }],
-          opacity: fadeAnim,
-        }
-      ]}
-    >
-      <View style={styles.todoContent}>
-        <TouchableOpacity
-          style={styles.checkboxContainer}
-          onPress={() => toggleCompleted(item.id, item.completed)}
-        >
-          <View style={[styles.checkbox, { borderColor: colors.textSecondary }, item.completed && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-            {item.completed ? (
-              <Ionicons name="checkmark" size={16} color={colors.textInverse} />
-            ) : null}
+    <View style={styles.todoCard}>
+      <View style={styles.todoHeader}>
+        <View style={styles.priorityContainer}>
+          <View style={[styles.priorityBadge, item.completed ? styles.completedBadge : styles.activeBadge]}>
+            <Text style={styles.priorityText}>{item.completed ? 'Done' : 'Active'}</Text>
           </View>
-        </TouchableOpacity>
-
-        <View style={styles.todoTextContainer}>
-          <Text style={[styles.todoText, { color: colors.text }, item.completed && { color: colors.textTertiary, textDecorationLine: 'line-through' }]}>
-            {item.text}
-          </Text>
+          <Text style={styles.progressText}>{item.completed ? '100%' : '0%'}</Text>
         </View>
-
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => deleteTodo(item.id)}
-        >
-          <MaterialIcons name="delete" size={24} color={colors.error} />
+      </View>
+      
+      <TouchableOpacity onPress={() => toggleCompleted(item.id, item.completed)}>
+        <Text style={styles.todoTitle}>{item.text}</Text>
+        <Text style={styles.todoTime}>Created: {new Date().toLocaleDateString()}</Text>
+      </TouchableOpacity>
+      
+      <View style={styles.todoFooter}>
+        <View style={styles.avatarContainer}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{currentUser.charAt(0).toUpperCase()}</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.deleteButton} onPress={() => deleteTodo(item.id)}>
+          <Text style={styles.deleteText}>×</Text>
         </TouchableOpacity>
       </View>
-    </Animated.View>
+    </View>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.primary }]}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={[styles.welcome, { color: colors.textInverse }]}>Hello, {currentUser}!</Text>
-            <Text style={[styles.subtitle, { color: colors.textInverse, opacity: 0.8 }]}>Let's organize your day</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <ThemeToggle style={{ marginRight: 15 }} />
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={24} color={colors.textInverse} />
-            </TouchableOpacity>
-          </View>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <Text style={styles.greeting}>Hello {currentUser.split('@')[0]} 👋</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => loadTodos(currentUserId)}>
+            <Text style={styles.refreshIcon}>⟲</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <View style={styles.inputSection}>
-          <View style={styles.inputContainer}>
-            <View style={[styles.inputWrapper, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Ionicons name="add-circle" size={20} color={colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={[styles.input, { color: colors.text }]}
-                placeholder="What needs to be done?"
-                placeholderTextColor={colors.inputPlaceholder}
-                value={newTodo}
-                onChangeText={setNewTodo}
-                onSubmitEditing={addTodo}
-                returnKeyType="done"
-              />
+      {/* Scrollable Content */}
+      <ScrollView 
+        style={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContainer}
+      >
+        <Text style={styles.headerTitle}>Manage Your{'\n'}Daily Task</Text>
+        
+        {/* Stats Cards */}
+        <View style={styles.statsGrid}>
+          <View style={[styles.statCard, styles.statCard1]}>
+            <View style={styles.statIcon}>
+              <Text style={styles.statIconText}>📱</Text>
             </View>
-            <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={addTodo}>
-              <Ionicons name="add" size={24} color={colors.textInverse} />
+            <Text style={styles.statTitle}>Mobile</Text>
+            <Text style={styles.statCount}>{todos.filter(t => !t.completed).length} Tasks</Text>
+          </View>
+          
+          <View style={[styles.statCard, styles.statCard2]}>
+            <View style={styles.statIcon}>
+              <Text style={styles.statIconText}>☀️</Text>
+            </View>
+            <Text style={styles.statTitle}>Completed</Text>
+            <Text style={styles.statCount}>{todos.filter(t => t.completed).length} Tasks</Text>
+          </View>
+          
+          <View style={[styles.statCard, styles.statCard3]}>
+            <View style={styles.statIcon}>
+              <Text style={styles.statIconText}>🎯</Text>
+            </View>
+            <Text style={styles.statTitle}>Website</Text>
+            <Text style={styles.statCount}>{todos.length} Tasks</Text>
+          </View>
+          
+          <View style={[styles.statCard, styles.statCard4]}>
+            <View style={styles.statIcon}>
+              <Text style={styles.statIconText}>🌐</Text>
+            </View>
+            <Text style={styles.statTitle}>Total</Text>
+            <Text style={styles.statCount}>{todos.length} Tasks</Text>
+          </View>
+        </View>
+
+        {/* Ongoing Section */}
+        <View style={styles.ongoingSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Ongoing</Text>
+            <TouchableOpacity>
+              <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search todos..."
-              placeholderTextColor={colors.inputPlaceholder}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-        </View>
-
-        <View style={styles.statsContainer}>
-          <View style={[styles.statItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>{todos.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total</Text>
-          </View>
-          <View style={[styles.statItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.statNumber, { color: colors.success }]}>{todos.filter(t => t.completed).length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Done</Text>
-          </View>
-          <View style={[styles.statItem, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.statNumber, { color: colors.warning }]}>{todos.filter(t => !t.completed).length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Pending</Text>
-          </View>
-        </View>
-
-        <FlatList
-          data={filteredTodos}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
-          style={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
+          {/* Todo Items */}
+          {filteredTodos.length > 0 ? (
+            filteredTodos.map((item, index) => (
+              <View key={item.id.toString()} style={styles.todoCard}>
+                <View style={styles.todoHeader}>
+                  <View style={styles.priorityContainer}>
+                    <View style={[styles.priorityBadge, item.completed ? styles.completedBadge : styles.activeBadge]}>
+                      <Text style={styles.priorityText}>{item.completed ? 'Done' : 'Active'}</Text>
+                    </View>
+                    <Text style={styles.progressText}>{item.completed ? '100%' : '0%'}</Text>
+                  </View>
+                </View>
+                
+                <TouchableOpacity onPress={() => toggleCompleted(item.id, item.completed)}>
+                  <Text style={styles.todoTitle}>{item.title || item.text}</Text>
+                  {item.description && item.description.trim() && (
+                    <Text style={styles.todoDescription}>{item.description}</Text>
+                  )}
+                  {item.priority && (
+                    <Text style={styles.todoPriority}>Priority: {item.priority}</Text>
+                  )}
+                  <Text style={styles.todoTime}>Created: {new Date().toLocaleDateString()}</Text>
+                </TouchableOpacity>
+                
+                <View style={styles.todoFooter}>
+                  <View style={styles.avatarContainer}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{currentUser.charAt(0).toUpperCase()}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={styles.deleteButton} onPress={() => deleteTodo(item.id)}>
+                    <Text style={styles.deleteText}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="document-text-outline" size={64} color={colors.textTertiary} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No todos yet</Text>
-              <Text style={[styles.emptySubtext, { color: colors.textTertiary }]}>Add your first task above</Text>
+              <Text style={styles.emptyText}>No tasks yet</Text>
+              <Text style={styles.emptySubtext}>Add your first task</Text>
             </View>
-          }
-        />
-      </Animated.View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Add Button */}
+      <TouchableOpacity 
+        style={styles.addButton} 
+        onPress={() => setIsModalVisible(true)}
+      >
+        <Text style={styles.addButtonText}>+</Text>
+      </TouchableOpacity>
+
+      {/* Add Task Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isModalVisible}
+        onRequestClose={() => setIsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <LinearGradient 
+              colors={['#f8f9fa', '#e3f2fd', '#fce4ec']}
+              locations={[0, 0.6, 1]}
+              style={styles.modalGradient}
+            >
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Create New Task</Text>
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={() => setIsModalVisible(false)}
+                >
+                  <Text style={styles.closeButtonText}>×</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Modal Form */}
+              <View style={styles.modalForm}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Task Title *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={taskTitle}
+                    onChangeText={setTaskTitle}
+                    placeholder="Enter task title"
+                    placeholderTextColor="#9ca3af"
+                    multiline={false}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Description (Optional)</Text>
+                  <TextInput
+                    style={[styles.modalInput, styles.descriptionInput]}
+                    value={taskDescription}
+                    onChangeText={setTaskDescription}
+                    placeholder="Add more details about your task"
+                    placeholderTextColor="#9ca3af"
+                    multiline={true}
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Priority</Text>
+                  <View style={styles.priorityButtons}>
+                    <TouchableOpacity
+                      style={[
+                        styles.priorityButton,
+                        taskPriority === 'low' && styles.priorityButtonActive
+                      ]}
+                      onPress={() => setTaskPriority('low')}
+                    >
+                      <Text style={[
+                        styles.priorityButtonText,
+                        taskPriority === 'low' && styles.priorityButtonTextActive
+                      ]}>Low</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.priorityButton,
+                        taskPriority === 'medium' && styles.priorityButtonActive
+                      ]}
+                      onPress={() => setTaskPriority('medium')}
+                    >
+                      <Text style={[
+                        styles.priorityButtonText,
+                        taskPriority === 'medium' && styles.priorityButtonTextActive
+                      ]}>Medium</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.priorityButton,
+                        taskPriority === 'high' && styles.priorityButtonActive
+                      ]}
+                      onPress={() => setTaskPriority('high')}
+                    >
+                      <Text style={[
+                        styles.priorityButtonText,
+                        taskPriority === 'high' && styles.priorityButtonTextActive
+                      ]}>High</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Modal Buttons */}
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => {
+                      setTaskTitle('');
+                      setTaskDescription('');
+                      setTaskPriority('medium');
+                      setIsModalVisible(false);
+                    }}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.createButton}
+                    onPress={addTodo}
+                  >
+                    <Text style={styles.createButtonText}>Create Task</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </LinearGradient>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Hidden input removed - no longer needed */}
+
+      {/* Bottom Tab Bar */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity style={[styles.tabItem, styles.activeTab]}>
+          <View style={styles.tabIconContainer}>
+            <Text style={styles.tabIcon}>🏠</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.tabItem}>
+          <View style={styles.tabIconContainer}>
+            <Text style={styles.tabIcon}>📊</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.tabItem}>
+          <View style={styles.tabIconContainer}>
+            <Text style={styles.tabIcon}>💬</Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Profile', { userEmail })}>
+          <View style={styles.tabIconContainer}>
+            <Text style={styles.tabIcon}>👤</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -275,194 +507,438 @@ function TodoScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f8f9fa',
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 30,
+    paddingTop: 60,
+    paddingBottom: 15,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
+    backgroundColor: '#f8f9fa',
   },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  welcome: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-  },
-  logoutButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  content: {
+  scrollContent: {
     flex: 1,
+  },
+  scrollContainer: {
     paddingHorizontal: 20,
+    paddingBottom: 120, // Add padding for the fixed tab bar and add button
   },
-  inputSection: {
-    marginTop: 20,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  inputWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 15,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginRight: 10,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-  },
-  addButton: {
-    borderRadius: 15,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 15,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginVertical: 20,
-    paddingHorizontal: 10,
-  },
-  statItem: {
-    alignItems: 'center',
-    borderRadius: 15,
-    padding: 15,
-    minWidth: 80,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  statNumber: {
-    fontSize: 24,
+  headerTitle: {
+    fontSize: 28,
     fontWeight: 'bold',
+    color: '#1f2937',
+    lineHeight: 34,
+    marginBottom: 30,
   },
-  statLabel: {
-    fontSize: 12,
-    marginTop: 5,
+  greeting: {
+    fontSize: 16,
+    color: '#6b7280',
   },
-  list: {
-    flex: 1,
+  refreshButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  refreshIcon: {
+    color: '#6b7280',
+    fontSize: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 30,
+    gap: 12,
+  },
+  statCard: {
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 100,
+    justifyContent: 'space-between',
+  },
+  statCard1: {
+    backgroundColor: '#e0e7ff',
+    width: '48%',
+  },
+  statCard2: {
+    backgroundColor: '#dcfce7',
+    width: '48%',
+  },
+  statCard3: {
+    backgroundColor: '#fef3c7',
+    width: '48%',
+  },
+  statCard4: {
+    backgroundColor: '#fecaca',
+    width: '48%',
+  },
+  statIcon: {
+    marginBottom: 8,
+  },
+  statIconText: {
+    fontSize: 24,
+  },
+  statTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  statCount: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  ongoingSection: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+  },
+  seeAllText: {
+    fontSize: 14,
+    color: '#6b7280',
   },
   todoCard: {
-    borderRadius: 15,
-    marginBottom: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
     shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-    borderWidth: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  todoContent: {
+  todoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  priorityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    width: '100%',
+    justifyContent: 'space-between',
   },
-  checkboxContainer: {
-    marginRight: 15,
+  priorityBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  checkbox: {
+  activeBadge: {
+    backgroundColor: '#ef4444',
+  },
+  completedBadge: {
+    backgroundColor: '#22c55e',
+  },
+  priorityText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  progressText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  todoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  todoDescription: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  todoPriority: {
+    fontSize: 12,
+    color: '#8b5cf6',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  todoTime: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 12,
+  },
+  todoFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  avatarContainer: {
+    flexDirection: 'row',
+  },
+  avatar: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    borderWidth: 2,
+    backgroundColor: '#6366f1',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkboxChecked: {
-  },
-  todoTextContainer: {
-    flex: 1,
-  },
-  todoText: {
-    fontSize: 16,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
+  avatarText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   deleteButton: {
-    padding: 5,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteText: {
+    color: '#6b7280',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  addButton: {
+    position: 'absolute',
+    bottom: 110, // Position above the tab bar
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#f59e0b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#f59e0b',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalGradient: {
+    padding: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1f2937',
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  closeButtonText: {
+    color: '#374151',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  modalForm: {
+    gap: 20,
+  },
+  inputGroup: {
+    gap: 8,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  modalInput: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#1f2937',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  descriptionInput: {
+    minHeight: 80,
+    maxHeight: 120,
+  },
+  priorityButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  priorityButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  priorityButtonActive: {
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+  },
+  priorityButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  priorityButtonTextActive: {
+    color: '#ffffff',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  createButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  createButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  tabBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingBottom: 20,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  tabItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+  },
+  activeTab: {
+    backgroundColor: 'transparent',
+  },
+  tabIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tabIcon: {
+    fontSize: 24,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 50,
+    paddingVertical: 40,
   },
   emptyText: {
     fontSize: 18,
-    marginTop: 10,
+    color: '#6b7280',
+    marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 14,
-    marginTop: 5,
+    color: '#9ca3af',
   },
 });
 

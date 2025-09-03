@@ -27,7 +27,10 @@ public class Todo implements Serializable {
 	@Column(length = 2000)
 	private String description;
 
-	@Column
+	@Column(length = 20)
+	private String priority = "MEDIUM";
+
+	@Column(name = "is_completed")
 	private Boolean completed = false;
 
 	@Column(name = "created_at")
@@ -46,6 +49,13 @@ public class Todo implements Serializable {
 	public Todo(String title, String description) {
 		this.title = title;
 		this.description = description;
+		this.priority = "MEDIUM"; // default priority
+	}
+
+	public Todo(String title, String description, String priority) {
+		this.title = title;
+		this.description = description;
+		this.priority = normalizePriority(priority);
 	}
 
 	public Long getId() {
@@ -70,6 +80,23 @@ public class Todo implements Serializable {
 
 	public void setDescription(String description) {
 		this.description = description;
+	}
+
+	public String getPriority() {
+		return priority;
+	}
+
+	public void setPriority(String priority) {
+		this.priority = normalizePriority(priority);
+	}
+
+	private String normalizePriority(String priority) {
+		if (priority == null) return "MEDIUM";
+		String upperPriority = priority.toUpperCase().trim();
+		if ("LOW".equals(upperPriority) || "MEDIUM".equals(upperPriority) || "HIGH".equals(upperPriority)) {
+			return upperPriority;
+		}
+		return "MEDIUM"; // default for invalid values
 	}
 
 	public boolean isCompleted() {
